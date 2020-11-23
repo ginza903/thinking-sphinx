@@ -1,0 +1,92 @@
+name: CI
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ 'ubuntu-16.04', 'ubuntu-18.04' ]
+        ruby: [ '2.4', '2.5', '2.6', '2.7' ]
+        rails: [ 'rails_4_2', 'rails_5_0', 'rails_5_1', 'rails_5_2', 'rails_6_0']
+        database: [ 'mysql2', 'postgresql' ]
+        sphinx_version: [ '2.2.11', '3.3.1', '2.8.2', '3.5.4' ]
+        sphinx_engine: [ 'sphinx', 'manticore' ]
+        exclude:
+          - os: 'ubuntu-18.04'
+            sphinx_version: '2.2.11'
+          - os: 'ubuntu-16.04'
+            sphinx_version: '3.3.1'
+          - os: 'ubuntu-16.04'
+            sphinx_engine: 'manticore'
+          - sphinx_version: '2.2.11'
+            sphinx_engine: 'manticore'
+          - sphinx_version: '3.3.1'
+            sphinx_engine: 'manticore'
+          - sphinx_version: '2.8.2'
+            sphinx_engine: 'sphinx'
+          - sphinx_version: '3.5.4'
+            sphinx_engine: 'sphinx'
+          - database: 'postgresql'
+            sphinx_version: '3.3.1'
+            sphinx_engine: 'sphinx'
+          - ruby: '2.4'
+            rails: 'rails_6_0'
+          - ruby: '2.5'
+            rails: 'rails_4_2'
+          - ruby: '2.6'
+            rails: 'rails_4_2'
+          - ruby: '2.7'
+            rails: 'rails_4_2'
+
+    services:
+      postgres:
+        image: postgres:10
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: thinking_sphinx
+          POSTGRES_DB: thinking_sphinx
+        ports: ['5432:5432']
+        # needed because the postgres container does not provide a healthcheck
+        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+
+      mysql:
+        image: mysql:5.7
+        env:
+          MYSQL_ROOT_PASSWORD: thinking_sphinx
+          MYSQL_DATABASE: thinking_sphinx
+        ports: ['3306:3306']
+        options: --health-cmd="mysqladmin ping" --health-interval=10s --health-timeout=5s --health-retries=3
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v2
+      - name: Set up ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ matrix.ruby }}
+      - name: Set up Bundler
+        run: |
+          gem update --system
+          gem install bundler -v '1.17.3'
+          bundle _1.17.3_ install --jobs=3 --retry=3
+      - name: Set up Sphinx
+        run: "./bin/loadsphinx ${{ matrix.sphinx_version }} ${{ matrix.sphinx_engine }}"
+      - name: Set up Appraisal
+        run: "bundle _1.17.3_ exec appraisal generate"
+      - name: Install Appraisal's gems
+        env:
+          BUNDLE_GEMFILE: "gemfiles/${{ matrix.rails }}.gemfile"
+        run: "bundle _1.17.3_ install"
+      - name: Test
+        env:
+          CI: "true"
+          DATABASE: ${{ matrix.database }}
+          SPHINX_VERSION: ${{ matrix.sphinx_version }}
+          SPHINX_ENGINE: ${{ matrix.sphinx_engine }}
+          BUNDLE_GEMFILE: "gemfiles/${{ matrix.rails }}.gemfile"
+        run: "bundle _1.17.3_ exec rspec"
+        timeout-minutes: 10
