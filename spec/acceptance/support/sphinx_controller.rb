@@ -6,7 +6,6 @@ class SphinxController
   end
 
   def setup
-    puts "SETTING UP SPHINX"
     FileUtils.mkdir_p config.indices_location
     config.controller.bin_path = ENV['SPHINX_BIN'] || ''
     config.render_to_file && index
@@ -26,7 +25,6 @@ class SphinxController
   end
 
   def start
-    puts "STARTING SPHINX"
     config.controller.start
   rescue Riddle::CommandFailedError => error
     puts <<-TXT
@@ -47,7 +45,6 @@ The Sphinx start command failed:
   end
 
   def index(*indices)
-    puts "INDEXING SPHINX"
     ThinkingSphinx::Commander.call :index_sql, config, :indices => indices
   end
 
